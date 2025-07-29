@@ -2,7 +2,9 @@
 const express = require('express');
 const router = express.Router();
 const { Client } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
+const qrcode = require('qrcode');
+const fs = require('fs');
+const path = require('path');
 
 // Inicializar el cliente de WhatsApp
 const client = new Client({
@@ -12,18 +14,20 @@ const client = new Client({
 });
 
 let receivedMessages = []; // Arreglo para almacenar los mensajes recibidos
+let latestQR = null; // Variable para almacenar el último QR generado
+let isReady = false; // Variable para controlar el estado de conexión
 
-client.on('qr', qr => {
-    qrcode.generate(qr, { small: true });
+client.on('qr', async qr => {
+    latestQR = await qrcode.toDataURL(qr); // Genera el QR como imagen base64
+    isReady = false;
 });
 
 client.on('ready', () => {
+    isReady = true;
     console.log('Client is ready!');
 });
 
 client.on('message_create', message => {
-    console.log('Mensaje recibido:', message.body);
-
     // Guardar los mensajes entrantes
     receivedMessages.push({
         id: message.id._serialized,
@@ -31,14 +35,46 @@ client.on('message_create', message => {
         body: message.body,
         timestamp: message.timestamp,
     });
-
-    // Ejemplo de respuesta a un comando específico
-    if (message.body === '!ping') {
-        message.reply('pong');
-    }
 });
 
 client.initialize();
+
+// Ruta para mostrar el QR y el mini mensajero
+router.get('/', (req, res) => {
+    const htmlPath = path.join(__dirname, 'qr.html');
+    const mensajeroPath = path.join(__dirname, 'mensajero.html');
+    fs.readFile(htmlPath, 'utf8', (err, html) => {
+        if (err) {
+            return res.status(500).send('Error cargando la página');
+        }
+        let qrSection = '';
+        if (!isReady) {
+            if (!latestQR) {
+                qrSection = '<h2>QR no disponible. Espere un momento...</h2>';
+                html = html.replace('{{QR_SECTION}}', qrSection);
+                return res.send(html);
+            } else {
+                qrSection = `
+                    <div class="qr">
+                        <p>Escanea este código QR con WhatsApp</p>
+                        <img src="${latestQR}" />
+                    </div>
+                `;
+                html = html.replace('{{QR_SECTION}}', qrSection);
+                return res.send(html);
+            }
+        } else {
+            // Leer el mensajero y ponerlo en el HTML principal
+            fs.readFile(mensajeroPath, 'utf8', (err2, mensajeroHtml) => {
+                if (err2) {
+                    return res.status(500).send('Error cargando el mensajero');
+                }
+                html = html.replace('{{QR_SECTION}}', mensajeroHtml);
+                res.send(html);
+            });
+        }
+    });
+});
 
 // Endpoint para enviar un mensaje
 router.post('/send', async (req, res) => {
