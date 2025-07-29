@@ -1,39 +1,79 @@
-<div class="mensajero">
-    <h3>Mini mensajero</h3>
-    <form id="sendForm">
-        <input type="text" id="numero" placeholder="Número (sin + ni espacios)" required style="width: 60%;" />
-        <input type="text" id="mensaje" placeholder="Mensaje" required style="width: 30%;" />
-        <button type="submit">Enviar</button>
-    </form>
-    <div class="messages" id="messages"></div>
-</div>
-<script>
-    async function fetchMessages() {
-        const res = await fetch('/messages');
-        const data = await res.json();
-        const messagesDiv = document.getElementById('messages');
-        messagesDiv.innerHTML = '';
-        data.messages.slice(-20).forEach(msg => {
-            const div = document.createElement('div');
-            div.className = 'msg ' + (msg.from.endsWith('@c.us') ? 'other' : 'me');
-            div.textContent = msg.from + ': ' + msg.body;
-            messagesDiv.appendChild(div);
-        });
-        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+<style>
+    #estado {
+        transition: opacity 0.5s ease;
+        opacity: 1;
     }
-    fetchMessages();
-    setInterval(fetchMessages, 3000);
 
-    document.getElementById('sendForm').onsubmit = async function(e) {
-        e.preventDefault();
-        const numero = document.getElementById('numero').value;
-        const mensaje = document.getElementById('mensaje').value;
-        await fetch('/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ numeroDestino: numero, mensaje })
-        });
-        document.getElementById('mensaje').value = '';
-        fetchMessages();
-    };
+    #estado.fade-out {
+        opacity: 0;
+    }
+</style>
+
+
+<div class="mensajero" style="text-align: center; margin-top: 20px;">
+    <h3 id="estado">⏳ Esperando conexión a WhatsApp...</h3>
+</div>
+
+<script>
+    let textoActual = "⏳ Esperando conexión a WhatsApp...";
+
+    async function checkReady() {
+        try {
+            const res = await fetch('/api/whatsapp/status');
+            const data = await res.json();
+            const estado = document.getElementById('estado');
+
+            const nuevoTexto = data.ready
+                ? "✅ Conectado a WhatsApp"
+                : "⏳ Esperando conexión a WhatsApp...";
+
+            if (textoActual !== nuevoTexto) {
+                textoActual = nuevoTexto;
+
+                // Aplicar fade-out solo si hay cambio
+                estado.classList.add('fade-out');
+
+                setTimeout(() => {
+                    estado.textContent = nuevoTexto;
+                    estado.classList.remove('fade-out');
+                }, 500);
+            }
+
+            // Si no está listo, redirige a mostrar QR
+            if (!data.ready) {
+                window.location.href = '/api/whatsapp';
+            }
+
+        } catch (err) {
+            console.error('Error al verificar el estado:', err);
+        }
+    }
+
+    checkReady();
+    setInterval(checkReady, 3000);
 </script>
+
+<!-- <script>
+    async function checkReady() {
+        try {
+            const res = await fetch('/api/whatsapp/status');
+            const data = await res.json();
+
+            if (data.ready) {
+                // Está conectado, actualiza el estado visual o recarga
+                estado.textContent = "✅ Conectado a WhatsApp";
+            } else {
+                // No conectado, redirigir a la ruta que maneja el QR
+                window.location.href = '/api/whatsapp';
+            }
+        } catch (err) {
+            console.error('Error al verificar el estado:', err);
+        }
+    }
+
+    // Ejecuta al cargar la página
+    checkReady();
+
+    // Verifica cada 3 segundos
+    setInterval(checkReady, 3000);
+</script>-->

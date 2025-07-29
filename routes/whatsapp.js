@@ -50,7 +50,18 @@ router.get('/', (req, res) => {
         let qrSection = '';
         if (!isReady) {
             if (!latestQR) {
-                qrSection = '<h2>QR no disponible. Espere un momento...</h2>';
+                //qrSection = '<h2>QR no disponible. Espere un momento...</h2>';
+                qrSection = `
+                            <div style="text-align:center;">
+                                <h2>QR no disponible. Espere un momento...</h2>
+                                <script>
+                                    setTimeout(() => {
+                                        location.reload();
+                                    }, 3000); // vuelve a intentar cada 3 segundos
+                                </script>
+                            </div>
+                        `;
+
                 html = html.replace('{{QR_SECTION}}', qrSection);
                 return res.send(html);
             } else {
@@ -98,5 +109,37 @@ router.post('/send', async (req, res) => {
 router.get('/messages', (req, res) => {
     res.json({ messages: receivedMessages });
 });
+
+// Endpoint para verificar el estado del cliente
+router.get('/status', (req, res) => {
+    res.json({ ready: isReady });
+});
+
+// Endpoint para reiniciar el cliente de WhatsApp
+router.get('/reset', async (req, res) => {
+    try {
+        console.log('🔁 Reiniciando cliente de WhatsApp...');
+        await client.destroy();       // Cierra sesión actual
+        receivedMessages = [];        // Limpia mensajes recibidos
+        isReady = false;
+        latestQR = null;
+
+        client.initialize();          // Re-inicializa el cliente
+
+        res.json({
+            success: true,
+            message: 'Cliente de WhatsApp reiniciado. Se generará un nuevo código QR.',
+            timestamp: Date.now()
+        });
+    } catch (err) {
+        console.error('❌ Error al resetear:', err);
+        res.status(500).json({
+            success: false,
+            error: 'No se pudo reiniciar el cliente de WhatsApp',
+            details: err.message
+        });
+    }
+});
+
 
 module.exports = router;
