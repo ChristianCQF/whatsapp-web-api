@@ -1,7 +1,7 @@
 // routes/whatsapp.js
 const express = require('express');
 const router = express.Router();
-const { Client } = require('whatsapp-web.js');
+const { Client, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
@@ -89,15 +89,15 @@ router.get('/', (req, res) => {
 
 // Endpoint para enviar un mensaje
 router.post('/send', async (req, res) => {
-    const { numeroDestino, mensaje } = req.body;
+    const { number, message } = req.body;
 
-    if (!numeroDestino || !mensaje) {
+    if (!number || !message) {
         return res.status(400).json({ error: 'Número de destino y mensaje son requeridos' });
     }
 
     try {
-        const chatId = `${numeroDestino}@c.us`;
-        const response = await client.sendMessage(chatId, mensaje);
+        const chatId = `${number}@c.us`;
+        const response = await client.sendMessage(chatId, message);
         res.json({ message: 'Mensaje enviado', response });
     } catch (error) {
         console.error('Error al enviar mensaje:', error);
@@ -141,5 +141,52 @@ router.get('/reset', async (req, res) => {
     }
 });
 
+router.post('/sendMedia', async (req, res) => {
+    const { number, message, imageUrl } = req.body;
+
+    if (!number) {
+        return res.status(400).json({ error: 'Número de destino es requerido' });
+    }
+
+    const chatId = `${number}@c.us`;
+
+    try {
+        // Si hay imagen, descargar y enviar
+        if (imageUrl) {
+            const media = await MessageMedia.fromUrl(imageUrl);
+            const sentMessage = await client.sendMessage(chatId, media, {
+                caption: message || '', // mensaje opcional
+            });
+            return res.json({ message: 'Imagen enviada con éxito', sentMessage });
+        } else if (message) {
+            // Solo mensaje de texto
+            const sentMessage = await client.sendMessage(chatId, message);
+            return res.json({ message: 'Mensaje enviado con éxito', sentMessage });
+        } else {
+            return res.status(400).json({ error: 'Debe enviar un mensaje o una imagen' });
+        }
+    } catch (err) {
+        console.error('Error al enviar media:', err);
+        return res.status(500).json({ error: 'Error al enviar imagen o mensaje' });
+    }
+});
+
+
+router.get('/contacts', async (req, res) => {
+    try {
+        const contacts = await client.getContacts();
+        const filtered = contacts.map(c => ({
+            number: c.number,
+            name: c.name || c.pushname || 'Sin nombre',
+            id: c.id._serialized,
+            isBusiness: c.isBusiness,
+            isMyContact: c.isMyContact
+        }));
+        res.json({ contacts: filtered });
+    } catch (err) {
+        console.error('Error al obtener contactos:', err);
+        res.status(500).json({ error: 'Error al obtener contactos' });
+    }
+});
 
 module.exports = router;
